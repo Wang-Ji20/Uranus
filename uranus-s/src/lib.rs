@@ -1,9 +1,12 @@
+//! Uranus server library & Client-Server interface
+//!
+
 use std::{io::Cursor, time::Duration};
 
 use anyhow::{anyhow, Result};
 use bytes::{Buf, BytesMut};
 use tokio::{
-    io::{AsyncReadExt, BufWriter},
+    io::{AsyncReadExt, AsyncWriteExt, BufWriter},
     net::{TcpListener, TcpStream},
     time,
 };
@@ -23,6 +26,8 @@ pub async fn run(listener: TcpListener) -> Result<()> {
     Ok(())
 }
 
+/// [`Listener`] listens a port, waiting for connections. Established connection is served by
+/// [`Handler`].
 #[derive(Debug)]
 struct Listener {
     listener: TcpListener,
@@ -36,7 +41,7 @@ impl Listener {
             let socket = self.accept().await?;
 
             let mut handler = Handler {
-                connection: Connection::new(socket)
+                connection: Connection::new(socket),
             };
 
             tokio::spawn(async move {
@@ -109,11 +114,22 @@ impl Connection {
             if 0 == self.stream.read_buf(&mut self.buffer).await? {
                 if self.buffer.is_empty() {
                     return Ok(None);
-                } else {
-                    return Err(anyhow!("connection reset by peer"));
                 }
+                return Err(anyhow!("connection reset by peer"));
             }
         }
+    }
+
+    pub async fn write_frame(&mut self, frame: &Frame) -> Result<()> {
+        match frame {
+            Frame::Simple(s) => {
+                self.stream.write_u8(b'+').await?;
+                self.stream.write_all(s.as_bytes()).await?;
+                self.stream.write_all(b"\r\n").await?;
+            }
+        };
+        self.stream.flush().await?; // note: the '?' cast io::Error to anyhow::Error
+        Ok(())
     }
 
     fn parse_frame(&mut self) -> Result<Option<Frame>> {
@@ -123,11 +139,11 @@ impl Connection {
             Ok(Some(())) => {
                 let len = buf.position() as usize;
                 buf.set_position(0);
-                let frame = Frame::parse(&mut buf)?.unwrap();
+                let frame = Frame::parse(&mut buf)?.unwrap(); // Frame::check guaranteed Some(_)
                 self.buffer.advance(len);
                 Ok(Some(frame))
             }
-            Err(e) => Err(e.into()),
+            Err(e) => Err(e),
         }
     }
 }
@@ -146,13 +162,11 @@ pub enum FrameError {
 impl Frame {
     pub fn check(src: &mut Cursor<&[u8]>) -> Result<Option<()>> {
         match get_u8(src) {
-            Some(b'+') => {
-                if let Some(_) = get_line(src) {
-                    Ok(Some(()))
-                } else {
-                    Ok(None)
-                }
-            }
+            Some(b'+') => Ok(if get_line(src).is_some() {
+                Some(())
+            } else {
+                None
+            }),
             None => Ok(None),
             _ => unimplemented!(),
         }
