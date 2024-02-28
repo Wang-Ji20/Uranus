@@ -76,17 +76,18 @@ pub struct Handler {
 
 impl Handler {
     async fn run(&mut self) -> Result<()> {
-        let frame = tokio::select! {
-            res = self.connection.read_frame() => res?
-        };
+        loop {
+            let frame = tokio::select! {
+                res = self.connection.read_frame() => res?
+            };
 
-        let frame = match frame {
-            Some(frame) => frame,
-            None => return Ok(()),
-        };
+            let frame = match frame {
+                Some(frame) => frame,
+                None => return Ok(()),
+            };
 
-        info!("received a frame {:?}", frame);
-        Ok(())
+            info!("received a frame {:?}", frame);
+        }
     }
 }
 
@@ -127,6 +128,7 @@ impl Connection {
                 self.stream.write_all(s.as_bytes()).await?;
                 self.stream.write_all(b"\r\n").await?;
             }
+            Frame::Array(_) => todo!(),
         };
         self.stream.flush().await?; // note: the '?' cast io::Error to anyhow::Error
         Ok(())
@@ -151,6 +153,7 @@ impl Connection {
 #[derive(Clone, Debug)]
 pub enum Frame {
     Simple(String),
+    Array(Vec<Frame>),
 }
 
 #[derive(Debug, thiserror::Error)]
