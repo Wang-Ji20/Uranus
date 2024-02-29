@@ -16,7 +16,7 @@ impl Client {
     }
 
     pub async fn ping(&mut self, _: Option<Bytes>) -> Result<()> {
-        let frame = Frame::Simple("PING".to_string());
+        let frame = Frame::Text("PING".to_string());
         debug!(request = ?frame);
         self.connection.write_frame(&frame).await?;
         Ok(())

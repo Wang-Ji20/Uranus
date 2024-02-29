@@ -121,16 +121,43 @@ impl Connection {
         }
     }
 
+    /// [`write_frame`] don't deal with recursions
     pub async fn write_frame(&mut self, frame: &Frame) -> Result<()> {
         match frame {
-            Frame::Simple(s) => {
-                self.stream.write_u8(b'+').await?;
-                self.stream.write_all(s.as_bytes()).await?;
-                self.stream.write_all(b"\r\n").await?;
+            Frame::Array(val) => {
+                self.stream.write_u8(b'*').await?;
+                self.write_decimal(val.len() as u64).await?;
+                for entry in val {
+                    self.write_scalar(entry).await?;
+                }
             }
-            Frame::Array(_) => todo!(),
+            _ => self.write_scalar(frame).await?,
         };
         self.stream.flush().await?; // note: the '?' cast io::Error to anyhow::Error
+        Ok(())
+    }
+
+    pub async fn write_scalar(&mut self, frame: &Frame) -> Result<()> {
+        match frame {
+            Frame::Text(s) => {
+                self.stream.write_u8(b'+').await?;
+                self.stream.write_all(s.as_bytes()).await?;
+            }
+            Frame::Error(err) => {
+                self.stream.write_u8(b'-').await?;
+                self.stream.write_all(err.as_bytes()).await?;
+            }
+            Frame::Binary(bin) => {
+                let len = bin.len();
+
+                self.stream.write_u8(b'$').await?;
+                self.write_decimal(len as u64).await?;
+                self.stream.write_all(bin).await?;
+            }
+            Frame::Null => todo!(),
+            Frame::Array(_) => Err(FrameError::Recursive)?,
+        }
+        self.write_crlf().await?;
         Ok(())
     }
 
@@ -148,18 +175,40 @@ impl Connection {
             Err(e) => Err(e),
         }
     }
+
+    async fn write_crlf(&mut self) -> Result<()> {
+        self.stream.write_all(b"\r\n").await?;
+        Ok(())
+    }
+
+    async fn write_decimal(&mut self, val: u64) -> Result<()> {
+        use std::io::Write;
+
+        let mut buf = [0u8; 20];
+        let mut buf = Cursor::new(&mut buf[..]);
+        write!(&mut buf, "{}", val)?;
+        let pos = buf.position() as usize;
+        self.stream.write_all(&buf.get_ref()[..pos]).await?;
+        self.write_crlf().await?;
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug)]
 pub enum Frame {
-    Simple(String),
+    Text(String),
+    Error(String),
+    Binary(bytes::Bytes),
     Array(Vec<Frame>),
+    Null,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum FrameError {
     #[error("This frame is incomplete")]
     Incomplete,
+    #[error("Uranus wire protocol doesn't support recursive array types")]
+    Recursive,
 }
 
 impl Frame {
@@ -180,13 +229,34 @@ impl Frame {
             Some(b'+') => {
                 if let Some(line) = get_line(src).map(|x| x.to_vec()) {
                     let string = String::from_utf8(line)?;
-                    Ok(Some(Frame::Simple(string)))
+                    Ok(Some(Frame::Text(string)))
                 } else {
                     Ok(None)
                 }
             }
             None => Ok(None),
             _ => unimplemented!(),
+        }
+    }
+}
+
+impl std::fmt::Display for Frame {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Frame::Text(txt) => std::fmt::Display::fmt(&txt, f),
+            Frame::Error(err) => write!(f, "error: {}", err),
+            Frame::Binary(binary) => std::fmt::LowerHex::fmt(&binary, f),
+            Frame::Array(parts) => {
+                for (i, part) in parts.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " ")?;
+                    }
+
+                    std::fmt::Display::fmt(&part, f)?;
+                }
+                Ok(())
+            }
+            Frame::Null => write!(f, "(nil)"),
         }
     }
 }
@@ -208,4 +278,18 @@ fn get_u8(src: &mut Cursor<&[u8]>) -> Option<u8> {
         return None;
     }
     Some(src.get_u8())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_array_frame() {
+        let arr_frames = Frame::Array(vec![
+            Frame::Text("SET".to_string()),
+            Frame::Text("123".to_string()),
+        ]);
+        println!("{}", arr_frames);
+    }
 }
