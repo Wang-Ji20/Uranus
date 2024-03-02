@@ -194,7 +194,7 @@ impl Connection {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Frame {
     Text(String),
     Error(String),
@@ -214,11 +214,22 @@ pub enum FrameError {
 impl Frame {
     pub fn check(src: &mut Cursor<&[u8]>) -> Result<Option<()>> {
         match get_u8(src) {
-            Some(b'+') => Ok(if get_line(src).is_some() {
-                Some(())
-            } else {
-                None
-            }),
+            Some(b'+') => Ok(get_line(src).map(|_| ())),
+            Some(b'-') => Ok(get_line(src).map(|_| ())),
+            Some(b'*') => {
+                let len = get_decimal(src)?;
+
+                for _ in 0..len {
+                    Frame::check(src)?;
+                }
+
+                Ok(Some(()))
+            }
+            Some(b'$') => {
+                let len: usize = get_decimal(src)?.try_into()?;
+                skip(src, len + 2)?;
+                Ok(Some(()))
+            }
             None => Ok(None),
             _ => unimplemented!(),
         }
@@ -233,6 +244,34 @@ impl Frame {
                 } else {
                     Ok(None)
                 }
+            }
+            Some(b'-') => {
+                let line = get_line(src).ok_or(FrameError::Incomplete)?.to_vec();
+                let string = String::from_utf8(line)?;
+
+                Ok(Some(Frame::Error(string)))
+            }
+            Some(b'*') => {
+                let len = get_decimal(src)?.try_into()?;
+                let mut out = Vec::with_capacity(len);
+
+                for _ in 0..len {
+                    out.push(Frame::parse(src)?.unwrap());
+                }
+
+                Ok(Some(Frame::Array(out)))
+            }
+            Some(b'$') => {
+                let len = get_decimal(src)?.try_into()?;
+                let n = len + 2;
+
+                if src.remaining() < n {
+                    return Err(FrameError::Incomplete)?;
+                }
+
+                let data = bytes::Bytes::copy_from_slice(&src.chunk()[..len]);
+                skip(src, n)?;
+                Ok(Some(Frame::Binary(data)))
             }
             None => Ok(None),
             _ => unimplemented!(),
@@ -280,16 +319,34 @@ fn get_u8(src: &mut Cursor<&[u8]>) -> Option<u8> {
     Some(src.get_u8())
 }
 
+fn skip(src: &mut Cursor<&[u8]>, n: usize) -> Result<()> {
+    if src.remaining() < n {
+        return Err(FrameError::Incomplete)?;
+    }
+
+    src.advance(n);
+    Ok(())
+}
+
+fn get_decimal(src: &mut Cursor<&[u8]>) -> Result<u64> {
+    let line = get_line(src).ok_or(FrameError::Incomplete)?;
+    let utf8_num = std::str::from_utf8(line)?;
+    Ok(utf8_num.parse::<u64>()?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_array_frame() {
+        let literal_frame = b"*2\r\n+SET\r\n+123\r\n";
+        let mut cursor: Cursor<&[u8]> = Cursor::new(literal_frame);
+        let parsed_frame = Frame::parse(&mut cursor).unwrap().unwrap();
         let arr_frames = Frame::Array(vec![
             Frame::Text("SET".to_string()),
             Frame::Text("123".to_string()),
         ]);
-        println!("{}", arr_frames);
+        assert_eq!(parsed_frame, arr_frames)
     }
 }
