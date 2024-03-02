@@ -429,6 +429,13 @@ dependencies = [
 [[package]]
 name = "uranus-kv"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
+]
 
 [[package]]
 name = "uranus-p"

@@ -121,7 +121,7 @@ impl Connection {
         }
     }
 
-    /// [`write_frame`] don't deal with recursions
+    /// [`write_frame`] can't deal with recursions
     pub async fn write_frame(&mut self, frame: &Frame) -> Result<()> {
         match frame {
             Frame::Array(val) => {
@@ -194,6 +194,16 @@ impl Connection {
     }
 }
 
+/// [`Command`] is a semantic information atom between client and server.
+#[derive(Debug)]
+pub enum Command {
+    Set,
+    Get,
+    Echo,
+}
+
+/// [`Frame`] is a transmission atom between client and server. A command typically
+/// consists of many frames. Command may arrange them to arrays.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Frame {
     Text(String),
@@ -213,11 +223,11 @@ pub enum FrameError {
 
 impl Frame {
     pub fn check(src: &mut Cursor<&[u8]>) -> Result<Option<()>> {
-        match get_u8(src) {
-            Some(b'+') => Ok(get_line(src).map(|_| ())),
-            Some(b'-') => Ok(get_line(src).map(|_| ())),
+        match get_u8_bump(src) {
+            Some(b'+') => Ok(get_line_bump(src).map(|_| ())),
+            Some(b'-') => Ok(get_line_bump(src).map(|_| ())),
             Some(b'*') => {
-                let len = get_decimal(src)?;
+                let len = get_decimal_bump(src)?;
 
                 for _ in 0..len {
                     Frame::check(src)?;
@@ -226,7 +236,7 @@ impl Frame {
                 Ok(Some(()))
             }
             Some(b'$') => {
-                let len: usize = get_decimal(src)?.try_into()?;
+                let len: usize = get_decimal_bump(src)?.try_into()?;
                 skip(src, len + 2)?;
                 Ok(Some(()))
             }
@@ -236,9 +246,9 @@ impl Frame {
     }
 
     pub fn parse(src: &mut Cursor<&[u8]>) -> Result<Option<Frame>> {
-        match get_u8(src) {
+        match get_u8_bump(src) {
             Some(b'+') => {
-                if let Some(line) = get_line(src).map(|x| x.to_vec()) {
+                if let Some(line) = get_line_bump(src).map(|x| x.to_vec()) {
                     let string = String::from_utf8(line)?;
                     Ok(Some(Frame::Text(string)))
                 } else {
@@ -246,13 +256,13 @@ impl Frame {
                 }
             }
             Some(b'-') => {
-                let line = get_line(src).ok_or(FrameError::Incomplete)?.to_vec();
+                let line = get_line_bump(src).ok_or(FrameError::Incomplete)?.to_vec();
                 let string = String::from_utf8(line)?;
 
                 Ok(Some(Frame::Error(string)))
             }
             Some(b'*') => {
-                let len = get_decimal(src)?.try_into()?;
+                let len = get_decimal_bump(src)?.try_into()?;
                 let mut out = Vec::with_capacity(len);
 
                 for _ in 0..len {
@@ -262,7 +272,7 @@ impl Frame {
                 Ok(Some(Frame::Array(out)))
             }
             Some(b'$') => {
-                let len = get_decimal(src)?.try_into()?;
+                let len = get_decimal_bump(src)?.try_into()?;
                 let n = len + 2;
 
                 if src.remaining() < n {
@@ -300,7 +310,7 @@ impl std::fmt::Display for Frame {
     }
 }
 
-fn get_line<'a>(src: &mut Cursor<&'a [u8]>) -> Option<&'a [u8]> {
+fn get_line_bump<'a>(src: &mut Cursor<&'a [u8]>) -> Option<&'a [u8]> {
     let start = src.position() as usize;
     let end = src.get_ref().len() - 1;
     for i in start..end {
@@ -312,7 +322,7 @@ fn get_line<'a>(src: &mut Cursor<&'a [u8]>) -> Option<&'a [u8]> {
     None
 }
 
-fn get_u8(src: &mut Cursor<&[u8]>) -> Option<u8> {
+fn get_u8_bump(src: &mut Cursor<&[u8]>) -> Option<u8> {
     if !src.has_remaining() {
         return None;
     }
@@ -321,15 +331,15 @@ fn get_u8(src: &mut Cursor<&[u8]>) -> Option<u8> {
 
 fn skip(src: &mut Cursor<&[u8]>, n: usize) -> Result<()> {
     if src.remaining() < n {
-        return Err(FrameError::Incomplete)?;
+        Err(FrameError::Incomplete)?
     }
 
     src.advance(n);
     Ok(())
 }
 
-fn get_decimal(src: &mut Cursor<&[u8]>) -> Result<u64> {
-    let line = get_line(src).ok_or(FrameError::Incomplete)?;
+fn get_decimal_bump(src: &mut Cursor<&[u8]>) -> Result<u64> {
+    let line = get_line_bump(src).ok_or(FrameError::Incomplete)?;
     let utf8_num = std::str::from_utf8(line)?;
     Ok(utf8_num.parse::<u64>()?)
 }
