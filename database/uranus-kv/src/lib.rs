@@ -2,23 +2,23 @@ use anyhow::Result;
 use bytes::Bytes;
 
 pub trait Storage {
-    fn put(key: &Bytes, value: &Bytes) -> Result<()>;
-    fn delete(key: &Bytes) -> Result<()>;
-    fn get(key: &Bytes) -> Result<Bytes>;
+    fn put(key: Bytes, value: Bytes) -> Result<()>;
+    fn delete(key: Bytes) -> Result<()>;
+    fn get(key: Bytes) -> Result<Bytes>;
 }
 
 pub struct KV {}
 
 impl Storage for KV {
-    fn put(_: &Bytes, _: &Bytes) -> Result<()> {
+    fn put(_: Bytes, _: Bytes) -> Result<()> {
         todo!()
     }
 
-    fn delete(_: &Bytes) -> Result<()> {
+    fn delete(_: Bytes) -> Result<()> {
         todo!()
     }
 
-    fn get(_: &Bytes) -> Result<Bytes> {
+    fn get(_: Bytes) -> Result<Bytes> {
         todo!()
     }
 }

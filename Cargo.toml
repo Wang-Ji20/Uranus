@@ -1,9 +1,10 @@
 [workspace]
 members = [
-    "uranus-kv", # key value store
-    "uranus-p",  # sql parser
-    "uranus-c",  # client binary
-    "uranus-s"   # server
+    "database/uranus-kv", # key value store
+    "database/uranus-p",  # sql parser
+    "database/uranus-c",  # client binary
+    "database/uranus-s",  # server
+    "network/uranus-rin"  # router & context & middleware framework
 ]
 resolver = "2"
 

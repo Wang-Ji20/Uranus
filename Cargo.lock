@@ -442,6 +442,10 @@ name = "uranus-p"
 version = "0.1.0"
 
 [[package]]
+name = "uranus-rin"
+version = "0.1.0"
+
+[[package]]
 name = "uranus-s"
 version = "0.1.0"
 dependencies = [
