@@ -11,7 +11,7 @@ pub async fn main() {
 async fn smain() -> Result<()> {
     setup_logging()?;
     let listener = TcpListener::bind(&format!("127.0.0.1:{}", DEFAULT_PORT)).await?;
-    uranus_s::run(listener).await?;
+    uranus_s::run(listener).await;
     Ok(())
 }
 

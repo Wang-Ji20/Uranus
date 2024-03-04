@@ -292,6 +292,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tests"
+version = "0.1.0"
+dependencies = [
+ "tokio",
+ "uranus-c",
+ "uranus-s",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -420,6 +429,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bytes",
+ "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -455,6 +465,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uranus-kv",
 ]
 
 [[package]]

@@ -4,7 +4,8 @@ members = [
     "database/uranus-p",  # sql parser
     "database/uranus-c",  # client binary
     "database/uranus-s",  # server
-    "network/uranus-rin"  # router & context & middleware framework
+    "network/uranus-rin", # router & context & middleware framework
+    "tests"
 ]
 resolver = "2"
 

@@ -1,6 +1,12 @@
 //! Uranus server library & Client-Server interface
 //!
 
+pub mod command;
+pub use command::*;
+
+pub mod db;
+pub use db::*;
+
 use std::{io::Cursor, time::Duration};
 
 use anyhow::{anyhow, Result};
@@ -10,10 +16,13 @@ use tokio::{
     net::{TcpListener, TcpStream},
     time,
 };
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
-pub async fn run(listener: TcpListener) -> Result<()> {
-    let mut server = Listener { listener };
+pub async fn run(listener: TcpListener) {
+    let mut server = Listener {
+        listener,
+        db: DBHandle::new(),
+    };
 
     tokio::select! {
         res = server.run() => {
@@ -22,8 +31,6 @@ pub async fn run(listener: TcpListener) -> Result<()> {
             }
         }
     }
-
-    Ok(())
 }
 
 /// [`Listener`] listens a port, waiting for connections. Established connection is served by
@@ -31,6 +38,7 @@ pub async fn run(listener: TcpListener) -> Result<()> {
 #[derive(Debug)]
 struct Listener {
     listener: TcpListener,
+    db: DBHandle,
 }
 
 impl Listener {
@@ -42,6 +50,7 @@ impl Listener {
 
             let mut handler = Handler {
                 connection: Connection::new(socket),
+                _database: self.db.clone(),
             };
 
             tokio::spawn(async move {
@@ -72,6 +81,7 @@ impl Listener {
 
 pub struct Handler {
     connection: Connection,
+    _database: DBHandle,
 }
 
 impl Handler {
@@ -87,6 +97,11 @@ impl Handler {
             };
 
             info!("received a frame {:?}", frame);
+
+            let cmd = Command::from_frame(frame)?;
+            debug!(?cmd);
+
+            cmd.apply(&mut self.connection).await?;
         }
     }
 }
@@ -192,14 +207,6 @@ impl Connection {
         self.write_crlf().await?;
         Ok(())
     }
-}
-
-/// [`Command`] is a semantic information atom between client and server.
-#[derive(Debug)]
-pub enum Command {
-    Set,
-    Get,
-    Echo,
 }
 
 /// [`Frame`] is a transmission atom between client and server. A command typically
