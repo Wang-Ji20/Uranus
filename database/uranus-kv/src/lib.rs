@@ -7,7 +7,7 @@ use thiserror::Error;
 pub trait Storage {
     fn put(&mut self, key: Bytes, value: Bytes) -> Result<()>;
     fn delete(&mut self, key: Bytes) -> Result<()>;
-    fn get(&self, key: Bytes) -> Result<Bytes>;
+    fn get(&self, key: Bytes) -> Result<Option<Bytes>>;
 }
 
 impl Debug for dyn Storage + Send + Sync {
@@ -31,10 +31,9 @@ pub enum StorageError {
 }
 
 impl Storage for StdHashKV {
+    /// put here is almost always succeed, but for other storage systems that may not be the case..
     fn put(&mut self, key: Bytes, value: Bytes) -> Result<()> {
-        self.hashmap
-            .insert(key, value)
-            .ok_or(StorageError::PutFailed)?;
+        self.hashmap.insert(key, value);
         Ok(())
     }
 
@@ -45,12 +44,8 @@ impl Storage for StdHashKV {
         Ok(())
     }
 
-    fn get(&self, key: Bytes) -> Result<Bytes> {
-        let result = self
-            .hashmap
-            .get(&key)
-            .ok_or(StorageError::GetFailed)
-            .map(|x| x.to_owned())?;
+    fn get(&self, key: Bytes) -> Result<Option<Bytes>> {
+        let result = self.hashmap.get(&key).map(|x| x.to_owned());
         Ok(result)
     }
 }
@@ -80,10 +75,13 @@ impl Storage for KV {
         todo!()
     }
 
-    fn get(&self, _: Bytes) -> Result<Bytes> {
+    fn get(&self, _: Bytes) -> Result<Option<Bytes>> {
         todo!()
     }
 }
+
+pub mod memtable;
+pub mod arena;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right

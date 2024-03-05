@@ -50,7 +50,7 @@ impl Listener {
 
             let mut handler = Handler {
                 connection: Connection::new(socket),
-                _database: self.db.clone(),
+                database: self.db.clone(),
             };
 
             tokio::spawn(async move {
@@ -81,7 +81,7 @@ impl Listener {
 
 pub struct Handler {
     connection: Connection,
-    _database: DBHandle,
+    database: DBHandle,
 }
 
 impl Handler {
@@ -101,7 +101,7 @@ impl Handler {
             let cmd = Command::from_frame(frame)?;
             debug!(?cmd);
 
-            cmd.apply(&mut self.connection).await?;
+            cmd.apply(&mut self.connection, &mut self.database).await?;
         }
     }
 }

@@ -296,6 +296,7 @@ name = "tests"
 version = "0.1.0"
 dependencies = [
  "tokio",
+ "tracing-subscriber",
  "uranus-c",
  "uranus-s",
 ]

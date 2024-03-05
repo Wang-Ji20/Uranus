@@ -12,3 +12,4 @@ path = "test_client.rs"
 tokio = { version = "1", features = ["full"]}
 uranus-s = { path = "../database/uranus-s" }
 uranus-c = { path = "../database/uranus-c" }
+tracing-subscriber = { workspace = true }

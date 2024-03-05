@@ -18,3 +18,13 @@ async fn echo_test() {
     let pong = client.echo("hello").await.unwrap();
     assert_eq!("hello", pong);
 }
+
+#[tokio::test]
+async fn getset_hashmap_test() {
+    _ = tracing_subscriber::fmt::try_init();
+    let (addr, _handle) = start_server().await;
+    let mut client = uranus_c::Client::connect(addr).await.unwrap();
+    client.set("hello", "world").await.unwrap();
+    let result = client.get("hello").await.unwrap();
+    println!("{:?}", result);
+}

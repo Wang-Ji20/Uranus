@@ -1,16 +1,17 @@
 use std::vec;
 
-use crate::Connection;
+use crate::{Connection, DBHandle};
 
 use super::Frame;
 use anyhow::Result;
 use bytes::Bytes;
 use thiserror::Error;
+use tracing::debug;
 
 /// [`Command`] is a semantic information atom between client and server.
 #[derive(Debug)]
 pub enum Command {
-    Set(Set),
+    Set(Put),
     Get(Get),
     Echo(Echo),
 }
@@ -27,7 +28,7 @@ impl Command {
             .to_lowercase();
         let command = match command_name.as_str() {
             "get" => Command::Get(Get::parse_frames(&mut parser)?),
-            "set" => Command::Set(Set::parse_frames(&mut parser)?),
+            "set" => Command::Set(Put::parse_frames(&mut parser)?),
             "echo" => Command::Echo(Echo::parse_frames(&mut parser)?),
             _ => Err(CommandParseError::UnknownCommand)?,
         };
@@ -35,12 +36,13 @@ impl Command {
         Ok(command)
     }
 
-    pub async fn apply(self, dst: &mut Connection) -> Result<()> {
+    pub async fn apply(self, dst: &mut Connection, db: &mut DBHandle) -> Result<()> {
         use Command::*;
 
         match self {
             Echo(echo) => echo.apply(dst).await,
-            _ => todo!(),
+            Set(set) => set.apply(db, dst).await,
+            Get(get) => get.apply(db, dst).await,
         }
     }
 }
@@ -141,27 +143,27 @@ impl CommandParser {
 /// This command set `key` to hold a value `value`.
 /// if `key` already have a value, that value is overwritten,
 #[derive(Debug)]
-pub struct Set {
+pub struct Put {
     pub key: String,
     pub value: Bytes,
 }
 
-impl Set {
-    pub fn new(key: impl ToString, value: Bytes) -> Set {
-        Set {
+impl Put {
+    pub fn new(key: impl ToString, value: Bytes) -> Put {
+        Put {
             key: key.to_string(),
             value,
         }
     }
 
-    pub fn parse_frames(parser: &mut CommandParser) -> Result<Set> {
+    pub fn parse_frames(parser: &mut CommandParser) -> Result<Put> {
         let key = parser
             .next_string()?
             .ok_or(CommandParseError::UnexpectedEOF)?;
         let value = parser
             .next_bytes()?
             .ok_or(CommandParseError::UnexpectedEOF)?;
-        Ok(Set { key, value })
+        Ok(Put { key, value })
     }
 
     /// Consume this command to generate an array frame representation
@@ -172,6 +174,13 @@ impl Set {
             Frame::Binary(self.value),
         ];
         Frame::Array(frame)
+    }
+
+    pub async fn apply(self, db: &mut DBHandle, dst: &mut Connection) -> Result<()> {
+        db.put(self.key, self.value)?;
+        let response = Frame::Text("OK".to_string());
+        dst.write_frame(&response).await?;
+        Ok(())
     }
 }
 
@@ -198,6 +207,17 @@ impl Get {
     pub fn into_frame(self) -> Frame {
         let frame = vec![Frame::Text("get".to_string()), Frame::Text(self.key)];
         Frame::Array(frame)
+    }
+
+    pub async fn apply(self, db: &DBHandle, dst: &mut Connection) -> Result<()> {
+        let response = if let Some(value) = db.get(self.key)? {
+            Frame::Binary(value)
+        } else {
+            Frame::Null
+        };
+        debug!(?response);
+        dst.write_frame(&response).await?;
+        Ok(())
     }
 }
 
