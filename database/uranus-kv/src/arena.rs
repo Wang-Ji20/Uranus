@@ -1,6 +1,4 @@
 //! Arena memory allocator
 //!
 
-pub(crate) struct _Arena {
-
-}
+pub(crate) struct _Arena {}

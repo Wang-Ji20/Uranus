@@ -12,6 +12,4 @@ struct _Node {
     next: AtomicPtr<_Node>,
 }
 
-struct _SkipList {
-
-}
+struct _SkipList {}
