@@ -1,15 +1,15 @@
-//! An implementation of LevelDB's memtable in Rust
+//! A re-implementation of LevelDB's memtable in Rust
 //!
 //! The original file: /db/skiplist.h
 //!
 
-use std::sync::atomic::AtomicPtr;
-
 use bytes::Bytes;
+
+type _NodeDescriptor = usize;
 
 struct _Node {
     key: Bytes,
-    next: AtomicPtr<_Node>,
+    next: [_NodeDescriptor],
 }
 
 struct _SkipList {}

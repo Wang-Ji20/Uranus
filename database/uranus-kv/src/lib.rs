@@ -82,6 +82,7 @@ impl Storage for KV {
 
 pub mod arena;
 pub mod memtable;
+pub mod linked_list;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right
